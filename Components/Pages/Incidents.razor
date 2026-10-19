@@ -1,0 +1,313 @@
+@page "/incidents"
+@rendermode InteractiveServer
+@inject IIncidentService IncidentService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>All Incidents — IR Command</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-family: 'Poppins', sans-serif; font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-2" Style="vertical-align: middle;" />
+            All Incidents
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+            @_filtered.Count of @_incidents.Count incidents shown
+        </MudText>
+    </div>
+    <AuthorizeView Roles="Analyst,Admin">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="OpenCreateDialog">
+            New Incident
+        </MudButton>
+    </AuthorizeView>
+</MudStack>
+
+<!-- Filters -->
+<MudPaper Class="pa-3 mb-4 glass-card" Elevation="0">
+    <MudGrid Spacing="2">
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_searchText" Label="Search" Variant="Variant.Outlined"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true" TextChanged="@((string v) => { _searchText = v; ApplyFilters(); })" />
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect Value="_statusFilter" Label="Status" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" T="string"
+                       ValueChanged="@((string? v) => { _statusFilter = v; ApplyFilters(); })">
+                @foreach (var s in Enum.GetValues<IncidentStatus>())
+                {
+                    <MudSelectItem Value="@s.ToString()">@s</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudSelect Value="_severityFilter" Label="Severity" Variant="Variant.Outlined"
+                       Dense="true" Clearable="true" T="string"
+                       ValueChanged="@((string? v) => { _severityFilter = v; ApplyFilters(); })">
+                @foreach (var s in Enum.GetValues<Domain.Enums.Severity>())
+                {
+                    <MudSelectItem Value="@s.ToString()">@s</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudTextField @bind-Value="_assigneeFilter" Label="Assignee" Variant="Variant.Outlined"
+                          Immediate="true" TextChanged="@((string v) => { _assigneeFilter = v; ApplyFilters(); })" />
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+<!-- Incidents Table -->
+<MudPaper Class="section-card" Elevation="1">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    <div class="premium-table-wrapper">
+        <MudDataGrid Items="@_filtered" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+                     RowClick="@((DataGridRowClickEventArgs<Incident> args) => Navigation.NavigateTo($"/incidents/{args.Item.Id}"))">
+            <Columns>
+                <PropertyColumn Property="x => x.IncidentNumber" Title="Incident #" />
+                <TemplateColumn Title="SEV">
+                    <CellTemplate>
+                        <span class="sev-badge @GetSevClass(context.Item.Severity)">@context.Item.Severity</span>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Item.Status)" Variant="Variant.Filled">
+                            @context.Item.Status
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Title">
+                    <CellTemplate>
+                        <div>
+                            <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Item.Title</MudText>
+                            @if (!string.IsNullOrEmpty(context.Item.MitreTactics))
+                            {
+                                var tactics = System.Text.Json.JsonSerializer.Deserialize<List<string>>(context.Item.MitreTactics);
+                                @if (tactics?.Count > 0)
+                                {
+                                    <div>
+                                        @foreach (var tactic in tactics.Take(3))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                                     Style="font-size: 0.65rem; height: 18px; margin: 1px;">@tactic</MudChip>
+                                        }
+                                        @if (tactics.Count > 3)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined"
+                                                     Style="font-size: 0.65rem; height: 18px; margin: 1px;">+@(tactics.Count - 3)</MudChip>
+                                        }
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Assignee">
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.AssignedTo))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@context.Item.AssignedTo</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">Unassigned</MudText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Detected">
+                    <CellTemplate>
+                        <MudText Typo="Typo.caption">@context.Item.DetectedAt.ToString("MMM dd HH:mm")</MudText>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="MTTR">
+                    <CellTemplate>
+                        @if (context.Item.ResolvedAt.HasValue)
+                        {
+                            var mttr = context.Item.ResolvedAt.Value - context.Item.DetectedAt;
+                            <MudText Typo="Typo.caption" Style="color: #43e97b;">@($"{(int)mttr.TotalHours}h {mttr.Minutes}m")</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">Open</MudText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="" StickyRight="true">
+                    <CellTemplate>
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                   OnClick="@(() => Navigation.NavigateTo($"/incidents/{context.Item.Id}"))">
+                            View
+                        </MudButton>
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+            <NoRecordsContent>
+                <MudText Class="pa-8 text-center" Style="color: var(--mud-palette-text-secondary);">
+                    No incidents found matching the current filters.
+                </MudText>
+            </NoRecordsContent>
+        </MudDataGrid>
+    </div>
+</MudPaper>
+
+<!-- Create Incident Dialog -->
+<MudDialog @bind-Visible="_showCreateDialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+            New Incident
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_newTitle" Label="Title" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="_newDescription" Label="Description" Variant="Variant.Outlined"
+                          Lines="3" />
+            <MudSelect @bind-Value="_newSeverity" Label="Severity" Variant="Variant.Outlined" T="Domain.Enums.Severity">
+                @foreach (var s in Enum.GetValues<Domain.Enums.Severity>())
+                {
+                    <MudSelectItem Value="@s">@s</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect @bind-Value="_newAssignedTo" Label="Assign To" Variant="Variant.Outlined" Clearable="true">
+                @foreach (var u in _analysts)
+                {
+                    <MudSelectItem Value="@u.Username">@u.DisplayName (@u.Username)</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showCreateDialog = false)" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="CreateIncident" Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@string.IsNullOrWhiteSpace(_newTitle)">
+            Create
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Incident> _incidents = new();
+    private List<Incident> _filtered = new();
+    private List<AppUser> _analysts = new();
+    private bool _loading = true;
+
+    private string _searchText = string.Empty;
+    private string? _statusFilter;
+    private string? _severityFilter;
+    private string _assigneeFilter = string.Empty;
+
+    private bool _showCreateDialog = false;
+    private string _newTitle = string.Empty;
+    private string _newDescription = string.Empty;
+    private Domain.Enums.Severity _newSeverity = Domain.Enums.Severity.SEV2;
+    private string? _newAssignedTo;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _incidents = await IncidentService.GetAllAsync();
+            var allUsers = await AuthService.GetAllUsersAsync();
+            _analysts = allUsers.Where(u => u.Role == "Analyst" || u.Role == "Manager").ToList();
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading incidents: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        _filtered = _incidents.Where(i =>
+        {
+            if (!string.IsNullOrWhiteSpace(_searchText) &&
+                !i.Title.Contains(_searchText, StringComparison.OrdinalIgnoreCase) &&
+                !i.IncidentNumber.Contains(_searchText, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            if (!string.IsNullOrEmpty(_statusFilter) &&
+                Enum.TryParse<IncidentStatus>(_statusFilter, out var status) && i.Status != status)
+                return false;
+
+            if (!string.IsNullOrEmpty(_severityFilter) &&
+                Enum.TryParse<Domain.Enums.Severity>(_severityFilter, out var severity) && i.Severity != severity)
+                return false;
+
+            if (!string.IsNullOrWhiteSpace(_assigneeFilter) &&
+                !string.Equals(i.AssignedTo, _assigneeFilter, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return true;
+        }).ToList();
+
+        StateHasChanged();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _newTitle = string.Empty;
+        _newDescription = string.Empty;
+        _newSeverity = Domain.Enums.Severity.SEV2;
+        _newAssignedTo = null;
+        _showCreateDialog = true;
+    }
+
+    private async Task CreateIncident()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+
+        try
+        {
+            var state = await AuthState!;
+            var username = state.User.Identity?.Name ?? "system";
+            var dto = new CreateIncidentDto(_newTitle, _newDescription, _newSeverity, _newAssignedTo);
+            var incident = await IncidentService.CreateAsync(dto, username);
+            _incidents.Insert(0, incident);
+            ApplyFilters();
+            _showCreateDialog = false;
+            Snackbar.Add($"Incident {incident.IncidentNumber} created successfully.", MudBlazor.Severity.Success);
+            Navigation.NavigateTo($"/incidents/{incident.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating incident: {ex.Message}", MudBlazor.Severity.Error);
+        }
+    }
+
+    private string GetSevClass(Domain.Enums.Severity sev) => sev switch
+    {
+        Domain.Enums.Severity.SEV0 => "sev-0",
+        Domain.Enums.Severity.SEV1 => "sev-1",
+        Domain.Enums.Severity.SEV2 => "sev-2",
+        Domain.Enums.Severity.SEV3 => "sev-3",
+        _ => "sev-3"
+    };
+
+    private Color GetStatusColor(IncidentStatus status) => status switch
+    {
+        IncidentStatus.Triage => Color.Default,
+        IncidentStatus.Investigation => Color.Info,
+        IncidentStatus.Containment => Color.Warning,
+        IncidentStatus.Eradication => Color.Error,
+        IncidentStatus.Recovery => Color.Success,
+        IncidentStatus.Closed => Color.Success,
+        _ => Color.Default
+    };
+}

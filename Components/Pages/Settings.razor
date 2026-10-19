@@ -1,0 +1,218 @@
+@page "/settings"
+@rendermode InteractiveServer
+
+<PageTitle>Settings — IR Command</PageTitle>
+
+<!-- Page Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" Style="vertical-align:middle;color:#94A3B8;" />
+            System Settings
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color:#94A3B8;">Configure IR Command system preferences</MudText>
+    </div>
+    <MudButton Variant="Variant.Filled"
+               Style="background:#3B82F6;color:white;"
+               StartIcon="@Icons.Material.Filled.Save"
+               OnClick="SaveSettings">
+        Save Changes
+    </MudButton>
+</MudStack>
+
+<MudGrid Spacing="3">
+    <!-- General Settings -->
+    <MudItem xs="12" md="6">
+        <div class="glass-card" style="padding:24px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                <div style="width:36px;height:36px;background:rgba(59,130,246,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <MudIcon Icon="@Icons.Material.Filled.Tune" Style="color:#3B82F6;font-size:20px;" />
+                </div>
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">General Settings</MudText>
+            </MudStack>
+
+            <MudStack Spacing="3">
+                <MudTextField @bind-Value="_systemName" Label="System Name" Variant="Variant.Outlined"
+                              HelperText="Display name shown in the app header" />
+                <MudTextField @bind-Value="_orgName" Label="Organization Name" Variant="Variant.Outlined"
+                              HelperText="Your organization's name for reports" />
+                <MudSelect @bind-Value="_defaultTimezone" Label="Default Timezone" Variant="Variant.Outlined">
+                    <MudSelectItem Value="@("UTC")">UTC</MudSelectItem>
+                    <MudSelectItem Value="@("America/New_York")">Eastern Time (ET)</MudSelectItem>
+                    <MudSelectItem Value="@("America/Chicago")">Central Time (CT)</MudSelectItem>
+                    <MudSelectItem Value="@("America/Los_Angeles")">Pacific Time (PT)</MudSelectItem>
+                    <MudSelectItem Value="@("Europe/London")">London (GMT/BST)</MudSelectItem>
+                    <MudSelectItem Value="@("Europe/Paris")">Central European Time</MudSelectItem>
+                    <MudSelectItem Value="@("Asia/Singapore")">Singapore (SGT)</MudSelectItem>
+                    <MudSelectItem Value="@("Asia/Tokyo")">Japan Standard Time (JST)</MudSelectItem>
+                </MudSelect>
+                <MudSwitch @bind-Value="_autoRefresh" Label="Auto-refresh Dashboard" Color="Color.Primary" />
+                <MudSwitch @bind-Value="_darkModeForced" Label="Force Dark Mode for all users" Color="Color.Primary" />
+            </MudStack>
+        </div>
+    </MudItem>
+
+    <!-- Notification Settings -->
+    <MudItem xs="12" md="6">
+        <div class="glass-card" style="padding:24px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                <div style="width:36px;height:36px;background:rgba(245,158,11,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <MudIcon Icon="@Icons.Material.Filled.Notifications" Style="color:#F59E0B;font-size:20px;" />
+                </div>
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">Notification Settings</MudText>
+            </MudStack>
+
+            <MudStack Spacing="3">
+                <MudSwitch @bind-Value="_notifyNewIncident" Label="Notify on new SEV0/SEV1 incidents" Color="Color.Warning" />
+                <MudSwitch @bind-Value="_notifySlaBreaches" Label="Notify on SLA breaches" Color="Color.Warning" />
+                <MudSwitch @bind-Value="_notifyNewAlerts" Label="Notify on new critical alerts" Color="Color.Warning" />
+                <MudTextField @bind-Value="_alertEmail" Label="Alert Email Address" Variant="Variant.Outlined"
+                              InputType="InputType.Email"
+                              HelperText="Email to receive critical notifications" />
+                <MudTextField @bind-Value="_webhookUrl" Label="Webhook URL (Slack/Teams)" Variant="Variant.Outlined"
+                              HelperText="Optional: POST notifications to this URL" />
+            </MudStack>
+        </div>
+    </MudItem>
+
+    <!-- SLA Configuration -->
+    <MudItem xs="12" md="6">
+        <div class="glass-card" style="padding:24px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                <div style="width:36px;height:36px;background:rgba(239,68,68,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Style="color:#EF4444;font-size:20px;" />
+                </div>
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">SLA Configuration</MudText>
+            </MudStack>
+
+            <MudText Typo="Typo.body2" Style="color:#64748B;margin-bottom:16px;">
+                Maximum time to resolve (in hours) before SLA breach is flagged.
+            </MudText>
+
+            <MudStack Spacing="3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="width:60px;height:24px;background:rgba(239,68,68,0.15);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#EF4444;font-size:11px;font-weight:700;">SEV0</MudText>
+                    </div>
+                    <MudNumericField @bind-Value="_sev0Hours" Label="Target Hours" Variant="Variant.Outlined"
+                                     Min="1" Max="24" Style="flex:1;" />
+                    <MudText Typo="Typo.caption" Style="color:#64748B;white-space:nowrap;">hours max</MudText>
+                </MudStack>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="width:60px;height:24px;background:rgba(245,158,11,0.15);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#F59E0B;font-size:11px;font-weight:700;">SEV1</MudText>
+                    </div>
+                    <MudNumericField @bind-Value="_sev1Hours" Label="Target Hours" Variant="Variant.Outlined"
+                                     Min="1" Max="72" Style="flex:1;" />
+                    <MudText Typo="Typo.caption" Style="color:#64748B;white-space:nowrap;">hours max</MudText>
+                </MudStack>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="width:60px;height:24px;background:rgba(59,130,246,0.15);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#3B82F6;font-size:11px;font-weight:700;">SEV2</MudText>
+                    </div>
+                    <MudNumericField @bind-Value="_sev2Hours" Label="Target Hours" Variant="Variant.Outlined"
+                                     Min="1" Max="168" Style="flex:1;" />
+                    <MudText Typo="Typo.caption" Style="color:#64748B;white-space:nowrap;">hours max</MudText>
+                </MudStack>
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="width:60px;height:24px;background:rgba(16,185,129,0.15);border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#10B981;font-size:11px;font-weight:700;">SEV3</MudText>
+                    </div>
+                    <MudNumericField @bind-Value="_sev3Hours" Label="Target Hours" Variant="Variant.Outlined"
+                                     Min="1" Max="720" Style="flex:1;" />
+                    <MudText Typo="Typo.caption" Style="color:#64748B;white-space:nowrap;">hours max</MudText>
+                </MudStack>
+            </MudStack>
+        </div>
+    </MudItem>
+
+    <!-- About -->
+    <MudItem xs="12" md="6">
+        <div class="glass-card" style="padding:24px;">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                <div style="width:36px;height:36px;background:rgba(139,92,246,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" Style="color:#8B5CF6;font-size:20px;" />
+                </div>
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">About IR Command</MudText>
+            </MudStack>
+
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">Version</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;font-weight:600;">2.0.0</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">Framework</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;">.NET 8 Blazor Server</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">UI Framework</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;">MudBlazor 7.x</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">Database</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;">SQLite + EF Core 8</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">Architecture</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;">Clean Architecture</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.body2" Style="color:#64748B;">Server Port</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;">5100</MudText>
+                </MudStack>
+                <MudDivider Style="border-color:rgba(255,255,255,0.06);" />
+                <div style="background:linear-gradient(135deg,rgba(59,130,246,0.1),rgba(139,92,246,0.1));border-radius:8px;padding:12px;margin-top:8px;border:1px solid rgba(59,130,246,0.2);">
+                    <MudText Typo="Typo.body2" Style="color:#94A3B8;text-align:center;">
+                        IR Command — Security Operations Platform
+                        <br />
+                        <span style="color:#475569;font-size:11px;">Built for SOC teams</span>
+                    </MudText>
+                </div>
+            </MudStack>
+        </div>
+    </MudItem>
+</MudGrid>
+
+@if (_savedMessage)
+{
+    <MudAlert Severity="MudBlazor.Severity.Success" Class="mt-4" ShowCloseIcon="true"
+              CloseIconClicked="@(() => _savedMessage = false)">
+        Settings saved successfully. (Note: some settings require application restart to take effect.)
+    </MudAlert>
+}
+
+@code {
+    private string _systemName = "IR Command";
+    private string _orgName = "Security Operations Center";
+    private string _defaultTimezone = "UTC";
+    private bool _autoRefresh = true;
+    private bool _darkModeForced = true;
+
+    private bool _notifyNewIncident = true;
+    private bool _notifySlaBreaches = true;
+    private bool _notifyNewAlerts = true;
+    private string _alertEmail = "soc@company.com";
+    private string _webhookUrl = string.Empty;
+
+    private int _sev0Hours = 1;
+    private int _sev1Hours = 4;
+    private int _sev2Hours = 24;
+    private int _sev3Hours = 72;
+
+    private bool _savedMessage;
+
+    private void SaveSettings()
+    {
+        // In a real app, persist to appsettings or DB
+        _savedMessage = true;
+    }
+}

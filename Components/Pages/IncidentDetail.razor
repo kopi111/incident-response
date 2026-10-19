@@ -1,0 +1,514 @@
+@page "/incidents/{Id:guid}"
+@rendermode InteractiveServer
+@inject IIncidentService IncidentService
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Incident Detail — IR Command</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+@if (_incident == null && !_loading)
+{
+    <MudAlert Severity="MudBlazor.Severity.Error">Incident not found.</MudAlert>
+}
+
+@if (_incident != null)
+{
+    <!-- Header -->
+    <MudPaper Class="section-card pa-4 mb-4" Elevation="1">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="mb-2">
+            <div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                    <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">@_incident.IncidentNumber</MudText>
+                    <span class="sev-badge @GetSevClass(_incident.Severity)">@_incident.Severity</span>
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(_incident.Status)" Variant="Variant.Filled">
+                        @_incident.Status
+                    </MudChip>
+                </MudStack>
+                <MudText Typo="Typo.h5" Style="font-family: 'Poppins', sans-serif; font-weight: 600;">@_incident.Title</MudText>
+            </div>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Navigation.NavigateTo("/incidents"))">
+                Back
+            </MudButton>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="3" Class="mb-2" Style="flex-wrap: wrap;">
+            <MudText Typo="Typo.body2">
+                <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                Detected @GetTimeOpen(_incident.DetectedAt) ago
+            </MudText>
+            @if (!string.IsNullOrEmpty(_incident.AssignedTo))
+            {
+                <MudText Typo="Typo.body2">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" Style="vertical-align: middle;" />
+                    Assigned to: <strong>@_incident.AssignedTo</strong>
+                </MudText>
+            }
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(_incident.MitreTactics))
+        {
+            var tactics = System.Text.Json.JsonSerializer.Deserialize<List<string>>(_incident.MitreTactics);
+            @if (tactics?.Count > 0)
+            {
+                <div>
+                    <MudText Typo="Typo.caption" Class="mb-1" Style="color: var(--mud-palette-text-secondary);">MITRE ATT&amp;CK Tactics:</MudText>
+                    @foreach (var tactic in tactics)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Class="mr-1 mb-1">@tactic</MudChip>
+                    }
+                </div>
+            }
+        }
+    </MudPaper>
+
+    <!-- Lifecycle Stepper -->
+    <MudPaper Class="section-card pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.subtitle2" Class="mb-3" Style="color: var(--mud-palette-text-secondary);">INCIDENT LIFECYCLE</MudText>
+        <div class="workflow-stepper">
+            @{
+                var stages = Enum.GetValues<IncidentStatus>().ToList();
+                var currentIdx = stages.IndexOf(_incident.Status);
+            }
+            @for (int i = 0; i < stages.Count; i++)
+            {
+                var stage = stages[i];
+                var idx = i;
+                var isDone = idx < currentIdx;
+                var isCurrent = idx == currentIdx;
+                var stepClass = isDone ? "step-done" : isCurrent ? "step-current" : "step-future";
+                var labelClass = isDone ? "step-done" : isCurrent ? "step-current" : "";
+
+                <div class="workflow-step">
+                    <div class="step-circle @stepClass">
+                        @if (isDone)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            <span>@(idx + 1)</span>
+                        }
+                    </div>
+                    <div class="step-label @labelClass">@stage</div>
+                </div>
+
+                @if (i < stages.Count - 1)
+                {
+                    var connClass = idx < currentIdx ? "connector-done" : idx == currentIdx ? "connector-active" : "";
+                    <div class="step-connector @connClass"></div>
+                }
+            }
+        </div>
+    </MudPaper>
+
+    <!-- Main Two-Column Layout -->
+    <MudGrid Class="mb-4">
+        <!-- Left: Assets + IOCs -->
+        <MudItem xs="12" md="5">
+            <MudStack Spacing="3">
+                <!-- Affected Assets -->
+                <MudPaper Class="section-card" Elevation="1">
+                    <div class="pa-3 pb-2">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.Computer" Class="mr-1" Style="vertical-align: middle; font-size: 1.2rem;" />
+                            Affected Assets
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">@_incident.AffectedAssets.Count</MudChip>
+                        </MudText>
+                    </div>
+                    <div class="premium-table-wrapper">
+                        <MudTable Items="@_incident.AffectedAssets" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                            <HeaderContent>
+                                <MudTh>Host</MudTh>
+                                <MudTh>Type</MudTh>
+                                <MudTh>Risk</MudTh>
+                                <MudTh>Status</MudTh>
+                                <MudTh></MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>
+                                    <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Hostname</MudText>
+                                    <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">@context.IpAddress</MudText>
+                                </MudTd>
+                                <MudTd>
+                                    <MudText Typo="Typo.caption">@context.AssetType</MudText>
+                                </MudTd>
+                                <MudTd>
+                                    <div>
+                                        <MudText Typo="Typo.caption" Class="@GetRiskClass(context.RiskScore)">@context.RiskScore</MudText>
+                                        <MudProgressLinear Value="@context.RiskScore" Color="@GetRiskColor(context.RiskScore)"
+                                                           Rounded="true" Size="Size.Small" />
+                                    </div>
+                                </MudTd>
+                                <MudTd>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAssetStatusColor(context.AssetStatus)" Variant="Variant.Filled">
+                                        @context.AssetStatus
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd>
+                                    <AuthorizeView Roles="Analyst,Manager,Admin" Context="authCtx">
+                                        @if (context.AssetStatus == "Active")
+                                        {
+                                            <MudButton Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                                       OnClick="@(() => IsolateAsset(context))">
+                                                Isolate
+                                            </MudButton>
+                                        }
+                                    </AuthorizeView>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                </MudPaper>
+
+                <!-- IOCs -->
+                <MudPaper Class="section-card" Elevation="1">
+                    <div class="pa-3 pb-2">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-1" Style="vertical-align: middle; font-size: 1.2rem;" />
+                            Indicators of Compromise
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="ml-2">@_incident.IOCs.Count</MudChip>
+                        </MudText>
+                    </div>
+                    <div class="premium-table-wrapper">
+                        <MudTable Items="@_incident.IOCs" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+                            <HeaderContent>
+                                <MudTh>Type</MudTh>
+                                <MudTh>Value</MudTh>
+                                <MudTh>Added</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>
+                                    <MudChip T="string" Size="Size.Small" Class="@GetIocClass(context.IocType)" Variant="Variant.Filled">
+                                        @context.IocType
+                                    </MudChip>
+                                </MudTd>
+                                <MudTd>
+                                    <div style="max-width: 180px;">
+                                        <MudText Typo="Typo.caption" Style="font-family: monospace; word-break: break-all;">@context.Value</MudText>
+                                        @if (!string.IsNullOrEmpty(context.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">@context.Description</MudText>
+                                        }
+                                    </div>
+                                </MudTd>
+                                <MudTd>
+                                    <MudText Typo="Typo.caption">@context.AddedAt.ToString("MMM dd HH:mm")</MudText>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                </MudPaper>
+            </MudStack>
+        </MudItem>
+
+        <!-- Right: Notes + MITRE -->
+        <MudItem xs="12" md="7">
+            <MudStack Spacing="3">
+                <!-- Notes / Activity Log -->
+                <MudPaper Class="section-card pa-4" Elevation="1">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.Notes" Class="mr-1" Style="vertical-align: middle; font-size: 1.2rem;" />
+                            Activity Log
+                        </MudText>
+                        <AuthorizeView Roles="Analyst,Manager,Admin">
+                            <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAddNoteDialog">
+                                Add Note
+                            </MudButton>
+                        </AuthorizeView>
+                    </MudStack>
+
+                    @if (_incident.Notes.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">No notes yet.</MudText>
+                    }
+                    @foreach (var note in _incident.Notes.OrderByDescending(n => n.CreatedAt))
+                    {
+                        <div class="note-item">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+                                <MudAvatar Size="Size.Small" Style="background: var(--gradient-primary); width: 28px; height: 28px;">
+                                    <MudText Typo="Typo.caption" Style="color: white; font-weight: 600; font-size: 0.7rem;">
+                                        @note.Author.FirstOrDefault().ToString().ToUpper()
+                                    </MudText>
+                                </MudAvatar>
+                                <MudText Typo="Typo.body2" Style="font-weight: 600;">@note.Author</MudText>
+                                <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
+                                    @note.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                </MudText>
+                            </MudStack>
+                            <MudText Typo="Typo.body2">@note.Content</MudText>
+                        </div>
+                    }
+                </MudPaper>
+
+                <!-- MITRE ATT&CK -->
+                @if (!string.IsNullOrEmpty(_incident.MitreTactics))
+                {
+                    var tactics = System.Text.Json.JsonSerializer.Deserialize<List<string>>(_incident.MitreTactics);
+                    @if (tactics?.Count > 0)
+                    {
+                        <MudPaper Class="section-card pa-4" Elevation="1">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Security" Class="mr-1" Style="vertical-align: middle; font-size: 1.2rem;" />
+                                MITRE ATT&amp;CK Tactics
+                            </MudText>
+                            <div class="stagger-in">
+                                @foreach (var tactic in tactics)
+                                {
+                                    <MudPaper Class="pa-2 mb-2" Elevation="0" Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 8px;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@tactic</MudChip>
+                                            <MudText Typo="Typo.caption" Style="color: var(--mud-palette-text-secondary);">
+                                                @GetTacticDescription(tactic)
+                                            </MudText>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </div>
+                        </MudPaper>
+                    }
+                }
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Actions Panel -->
+    <AuthorizeView Roles="Analyst,Manager,Admin">
+        <MudPaper Class="section-card pa-4 mb-4" Elevation="1">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="mr-1" Style="vertical-align: middle; font-size: 1.2rem;" />
+                Response Actions
+            </MudText>
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Advance Status</MudText>
+                    <MudStack Row="true" Spacing="1" Style="flex-wrap: wrap;">
+                        @{
+                            var stages = Enum.GetValues<IncidentStatus>().ToList();
+                            var currentIdx = stages.IndexOf(_incident.Status);
+                        }
+                        @if (currentIdx < stages.Count - 1)
+                        {
+                            var nextStatus = stages[currentIdx + 1];
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.ArrowForward"
+                                       OnClick="@(() => ChangeStatus(nextStatus))">
+                                Move to @nextStatus
+                            </MudButton>
+                        }
+                        @if (currentIdx > 0)
+                        {
+                            var prevStatus = stages[currentIdx - 1];
+                            <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                                       OnClick="@(() => ChangeStatus(prevStatus))">
+                                Revert to @prevStatus
+                            </MudButton>
+                        }
+                        @if (_incident.Status is IncidentStatus.Eradication or IncidentStatus.Recovery)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.CheckCircle"
+                                       OnClick="@(() => ChangeStatus(IncidentStatus.Closed))">
+                                Close Incident
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Reassign</MudText>
+                    <MudStack Row="true" Spacing="2">
+                        <MudSelect @bind-Value="_reassignTo" Label="Assign to" Variant="Variant.Outlined"
+                                   Dense="true" Style="min-width: 200px;">
+                            @foreach (var u in _analysts)
+                            {
+                                <MudSelectItem Value="@u.Username">@u.DisplayName</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" Size="Size.Small"
+                                   OnClick="ReassignIncident" Disabled="@string.IsNullOrEmpty(_reassignTo)">
+                            Reassign
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    </AuthorizeView>
+}
+
+@code {
+    [Parameter]
+    public Guid Id { get; set; }
+
+    private Incident? _incident;
+    private List<AppUser> _analysts = new();
+    private string? _reassignTo;
+    private bool _loading = true;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _incident = await IncidentService.GetByIdAsync(Id);
+            var allUsers = await AuthService.GetAllUsersAsync();
+            _analysts = allUsers.Where(u => u.Role == "Analyst" || u.Role == "Manager").ToList();
+            _reassignTo = _incident?.AssignedTo;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading incident: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OpenAddNoteDialog()
+    {
+        var dialog = await DialogService.ShowAsync<AddNoteDialog>("Add Note");
+        var result = await dialog.Result;
+        if (!result!.Canceled && result.Data is string content)
+        {
+            try
+            {
+                var state = await AuthState!;
+                var username = state.User.Identity?.Name ?? "system";
+                var note = await IncidentService.AddNoteAsync(Id, content, username);
+                _incident!.Notes.Add(note);
+                Snackbar.Add("Note added.", MudBlazor.Severity.Success);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error adding note: {ex.Message}", MudBlazor.Severity.Error);
+            }
+        }
+    }
+
+    private async Task ChangeStatus(IncidentStatus newStatus)
+    {
+        try
+        {
+            var state = await AuthState!;
+            var username = state.User.Identity?.Name ?? "system";
+            _incident = await IncidentService.UpdateStatusAsync(Id, newStatus, username);
+            Snackbar.Add($"Status changed to {newStatus}.", MudBlazor.Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error changing status: {ex.Message}", MudBlazor.Severity.Error);
+        }
+    }
+
+    private async Task ReassignIncident()
+    {
+        if (string.IsNullOrEmpty(_reassignTo)) return;
+        try
+        {
+            var state = await AuthState!;
+            var username = state.User.Identity?.Name ?? "system";
+            _incident = await IncidentService.AssignAsync(Id, _reassignTo, username);
+            Snackbar.Add($"Incident assigned to {_reassignTo}.", MudBlazor.Severity.Success);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error reassigning: {ex.Message}", MudBlazor.Severity.Error);
+        }
+    }
+
+    private async Task IsolateAsset(AffectedAsset asset)
+    {
+        try
+        {
+            await IncidentService.IsolateAssetAsync(Id, asset.Id);
+            asset.AssetStatus = "Isolated";
+            Snackbar.Add($"{asset.Hostname} has been isolated.", MudBlazor.Severity.Warning);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error isolating asset: {ex.Message}", MudBlazor.Severity.Error);
+        }
+    }
+
+    private string GetSevClass(Domain.Enums.Severity sev) => sev switch
+    {
+        Domain.Enums.Severity.SEV0 => "sev-0",
+        Domain.Enums.Severity.SEV1 => "sev-1",
+        Domain.Enums.Severity.SEV2 => "sev-2",
+        Domain.Enums.Severity.SEV3 => "sev-3",
+        _ => "sev-3"
+    };
+
+    private Color GetStatusColor(IncidentStatus status) => status switch
+    {
+        IncidentStatus.Triage => Color.Default,
+        IncidentStatus.Investigation => Color.Info,
+        IncidentStatus.Containment => Color.Warning,
+        IncidentStatus.Eradication => Color.Error,
+        IncidentStatus.Recovery => Color.Success,
+        IncidentStatus.Closed => Color.Success,
+        _ => Color.Default
+    };
+
+    private string GetTimeOpen(DateTime detectedAt)
+    {
+        var elapsed = DateTime.UtcNow - detectedAt;
+        if (elapsed.TotalDays >= 1)
+            return $"{(int)elapsed.TotalDays}d {elapsed.Hours}h";
+        return $"{elapsed.Hours}h {elapsed.Minutes}m";
+    }
+
+    private Color GetAssetStatusColor(string status) => status switch
+    {
+        "Active" => Color.Error,
+        "Isolated" => Color.Success,
+        "Reimaged" => Color.Info,
+        _ => Color.Default
+    };
+
+    private string GetRiskClass(int score) => score > 70 ? "risk-high" : score > 40 ? "risk-medium" : "risk-low";
+
+    private Color GetRiskColor(int score) => score > 70 ? Color.Error : score > 40 ? Color.Warning : Color.Success;
+
+    private string GetIocClass(string iocType) => iocType.ToLower() switch
+    {
+        "hash" => "ioc-hash",
+        "domain" => "ioc-domain",
+        "ip" => "ioc-ip",
+        "email" => "ioc-email",
+        "url" => "ioc-url",
+        _ => ""
+    };
+
+    private string GetTacticDescription(string tactic) => tactic switch
+    {
+        "Initial Access" => "Attacker gained a foothold in the environment",
+        "Execution" => "Malicious code was run on a local or remote system",
+        "Persistence" => "Adversary maintained access across system restarts",
+        "Privilege Escalation" => "Gained higher-level permissions in the environment",
+        "Defense Evasion" => "Techniques used to avoid detection",
+        "Credential Access" => "Stole account credentials from the environment",
+        "Discovery" => "Explored the environment to understand the target",
+        "Lateral Movement" => "Moved through the environment to reach objectives",
+        "Collection" => "Gathered data of interest to the adversary goal",
+        "Exfiltration" => "Stolen data was moved to an external location",
+        "Impact" => "Disrupted availability or compromised integrity of systems",
+        _ => "Adversary technique observed during the incident"
+    };
+}

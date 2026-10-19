@@ -1,0 +1,438 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IIncidentService IncidentService
+@inject IMetricsService MetricsService
+@inject IAlertService AlertService
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard — IR Command</PageTitle>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<!-- Page Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#F1F5F9;">Security Operations Center</MudText>
+        <MudText Typo="Typo.body2" Style="color:#94A3B8;">Real-time incident response overview — auto-refreshes every 30s</MudText>
+    </div>
+    <MudStack Row="true" Spacing="2">
+        <MudChip T="string" Style="background:rgba(16,185,129,0.1);color:#10B981;border:1px solid rgba(16,185,129,0.3);">
+            <MudIcon Icon="@Icons.Material.Filled.Circle" Style="font-size:8px;color:#10B981;" Class="mr-1" />
+            Live
+        </MudChip>
+    </MudStack>
+</MudStack>
+
+@if (_summary != null)
+{
+    <!-- Row 1: KPI Cards -->
+    <MudGrid Spacing="3" Class="mb-6">
+        <!-- Total Active -->
+        <MudItem xs="12" sm="6" md="2">
+            <div class="kpi-card" style="border-left:4px solid #3B82F6;">
+                <div class="kpi-icon" style="background:rgba(59,130,246,0.15);">
+                    <MudIcon Icon="@Icons.Material.Filled.Shield" Style="color:#3B82F6;font-size:22px;" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:#3B82F6;">@_summary.TotalActive</div>
+                    <div class="kpi-label">Total Active</div>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- Critical -->
+        <MudItem xs="12" sm="6" md="2">
+            <div class="kpi-card" style="border-left:4px solid #EF4444;">
+                <div class="kpi-icon" style="background:rgba(239,68,68,0.15);">
+                    <MudIcon Icon="@Icons.Material.Filled.Error" Style="color:#EF4444;font-size:22px;" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:#EF4444;">@_summary.Critical</div>
+                    <div class="kpi-label">Critical (SEV0)</div>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- High -->
+        <MudItem xs="12" sm="6" md="2">
+            <div class="kpi-card" style="border-left:4px solid #F59E0B;">
+                <div class="kpi-icon" style="background:rgba(245,158,11,0.15);">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Style="color:#F59E0B;font-size:22px;" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:#F59E0B;">@_summary.High</div>
+                    <div class="kpi-label">High (SEV1)</div>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- SLA Breaches -->
+        <MudItem xs="12" sm="6" md="2">
+            @{
+                var slaColor = _summary.SlaBreaches > 0 ? "#EF4444" : "#10B981";
+                var slaBgColor = _summary.SlaBreaches > 0 ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)";
+            }
+            <div class="kpi-card" style="border-left:4px solid @slaColor;">
+                <div class="kpi-icon" style="background:@slaBgColor;">
+                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Style="@($"color:{slaColor};font-size:22px;")" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:@slaColor;">@_summary.SlaBreaches</div>
+                    <div class="kpi-label">SLA Breaches</div>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- Avg MTTR -->
+        <MudItem xs="12" sm="6" md="2">
+            <div class="kpi-card" style="border-left:4px solid #8B5CF6;">
+                <div class="kpi-icon" style="background:rgba(139,92,246,0.15);">
+                    <MudIcon Icon="@Icons.Material.Filled.Timer" Style="color:#8B5CF6;font-size:22px;" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:#8B5CF6;">@FormatMttr(_summary.AvgMttrMinutes)</div>
+                    <div class="kpi-label">Avg MTTR</div>
+                </div>
+            </div>
+        </MudItem>
+
+        <!-- Resolved Today -->
+        <MudItem xs="12" sm="6" md="2">
+            <div class="kpi-card" style="border-left:4px solid #10B981;">
+                <div class="kpi-icon" style="background:rgba(16,185,129,0.15);">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="color:#10B981;font-size:22px;" />
+                </div>
+                <div class="kpi-content">
+                    <div class="kpi-value" style="color:#10B981;">@_summary.Resolved</div>
+                    <div class="kpi-label">Resolved Today</div>
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Row 2: Charts -->
+    <MudGrid Spacing="3" Class="mb-6">
+        <!-- Incident Trend Line Chart -->
+        <MudItem xs="12" md="8">
+            <div class="glass-card" style="padding:20px;height:100%;">
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" Style="color:#3B82F6;vertical-align:middle;" />
+                    14-Day Incident Trend
+                </MudText>
+                @if (_chartSeries.Length > 0 && _chartLabels.Length > 0)
+                {
+                    <MudChart ChartType="ChartType.Line"
+                              Series="@_chartSeries"
+                              XAxisLabels="@_chartLabels"
+                              ChartOptions="@_lineChartOptions"
+                              Height="220" />
+                }
+                else
+                {
+                    <div style="height:220px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#475569;">No data available</MudText>
+                    </div>
+                }
+            </div>
+        </MudItem>
+
+        <!-- Severity Distribution Pie Chart -->
+        <MudItem xs="12" md="4">
+            <div class="glass-card" style="padding:20px;height:100%;">
+                <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+                    <MudIcon Icon="@Icons.Material.Filled.PieChart" Class="mr-2" Style="color:#8B5CF6;vertical-align:middle;" />
+                    Severity Distribution
+                </MudText>
+                @if (_pieData.Any(d => d > 0))
+                {
+                    <MudChart ChartType="ChartType.Pie"
+                              InputData="@_pieData"
+                              InputLabels="@_pieLabels"
+                              ChartOptions="@_pieChartOptions"
+                              Height="220" />
+                }
+                else
+                {
+                    <div style="height:220px;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:#475569;">No active incidents</MudText>
+                    </div>
+                }
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Row 3: Active Incidents + Live Alert Feed -->
+    <MudGrid Spacing="3" Class="mb-6">
+        <!-- Active Incidents Table -->
+        <MudItem xs="12" md="8">
+            <div class="glass-card" style="padding:0;overflow:hidden;">
+                <div style="padding:20px 20px 12px;">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">
+                            <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-2" Style="color:#EF4444;vertical-align:middle;" />
+                            Active Incidents
+                        </MudText>
+                        <MudChip T="string" Size="Size.Small" Style="background:rgba(59,130,246,0.15);color:#3B82F6;border:1px solid rgba(59,130,246,0.3);">
+                            @_activeIncidents.Count open
+                        </MudChip>
+                    </MudStack>
+                </div>
+                <MudTable Items="@_activeIncidents" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm"
+                          OnRowClick="@((TableRowClickEventArgs<Incident> e) => { if(e.Item!=null) Navigation.NavigateTo($"/incidents/{e.Item.Id}"); })"
+                          Style="background:transparent;"
+                          T="Incident">
+                    <HeaderContent>
+                        <MudTh Style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.5px;">SEV</MudTh>
+                        <MudTh Style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.5px;">INC#</MudTh>
+                        <MudTh Style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.5px;">TITLE</MudTh>
+                        <MudTh Style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.5px;">ASSIGNEE</MudTh>
+                        <MudTh Style="color:#64748B;font-size:11px;font-weight:600;letter-spacing:0.5px;">TIME OPEN</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="inc">
+                        <MudTd>
+                            <span class="sev-badge @GetSevClass(inc.Severity)">@inc.Severity</span>
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.caption" Style="color:#64748B;font-family:monospace;">@inc.IncidentNumber</MudText>
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.body2" Style="font-weight:500;color:#F1F5F9;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@inc.Title</MudText>
+                        </MudTd>
+                        <MudTd>
+                            @if (!string.IsNullOrEmpty(inc.AssignedTo))
+                            {
+                                <MudChip T="string" Size="Size.Small" Style="background:rgba(99,102,241,0.15);color:#818CF8;border:1px solid rgba(99,102,241,0.2);height:22px;font-size:11px;">@inc.AssignedTo</MudChip>
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Style="color:#475569;">Unassigned</MudText>
+                            }
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.caption" Style="color:#94A3B8;">@GetTimeOpen(inc.DetectedAt)</MudText>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-6 text-center" Style="color:#475569;">All clear — no active incidents</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </div>
+        </MudItem>
+
+        <!-- Live Alert Feed -->
+        <MudItem xs="12" md="4">
+            <div class="glass-card" style="padding:20px;height:100%;">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;">
+                        <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Class="mr-2" Style="color:#F59E0B;vertical-align:middle;" />
+                        Live Alerts
+                    </MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Style="color:#3B82F6;" Href="/alerts">View All</MudButton>
+                </MudStack>
+                <div style="overflow-y:auto;max-height:320px;">
+                    @if (_recentAlerts.Count == 0)
+                    {
+                        <div style="text-align:center;padding:40px 0;">
+                            <MudText Style="color:#475569;">No recent alerts</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        @foreach (var alert in _recentAlerts)
+                        {
+                            <div class="alert-feed-item" style="border-left:3px solid @GetAlertSeverityColor(alert.Severity);margin-bottom:10px;">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                        @if (alert.Status == "New")
+                                        {
+                                            <div style="width:6px;height:6px;background:#EF4444;border-radius:50%;animation:pulse 2s infinite;"></div>
+                                        }
+                                        <MudText Typo="Typo.caption" Style="font-family:monospace;color:#64748B;">@alert.AlertNumber</MudText>
+                                    </MudStack>
+                                    <span class="badge-@alert.Severity.ToLower()" style="font-size:10px;padding:2px 6px;border-radius:4px;">@alert.Severity</span>
+                                </MudStack>
+                                <MudText Typo="Typo.body2" Style="font-weight:600;color:#E2E8F0;font-size:12px;margin-bottom:2px;">@alert.Title</MudText>
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.caption" Style="color:#64748B;">@alert.Source</MudText>
+                                    <MudText Typo="Typo.caption" Style="color:#475569;">@GetTimeAgo(alert.ReceivedAt)</MudText>
+                                </MudStack>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Row 4: Analyst Workload -->
+    @if (_workload?.Count > 0)
+    {
+        <div class="glass-card" style="padding:20px;">
+            <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+                <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" Style="color:#06B6D4;vertical-align:middle;" />
+                Analyst Workload
+            </MudText>
+            <MudGrid Spacing="3">
+                @foreach (var w in _workload)
+                {
+                    var maxCount = _workload.Max(x => x.OpenCount);
+                    var pct = maxCount > 0 ? (double)w.OpenCount / maxCount * 100 : 0;
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.body2" Style="color:#E2E8F0;font-weight:500;">@w.Analyst</MudText>
+                                <MudText Typo="Typo.caption" Style="color:#94A3B8;">@w.OpenCount open</MudText>
+                            </MudStack>
+                            <MudProgressLinear Value="@pct" Color="@GetWorkloadColor(w.OpenCount)"
+                                              Rounded="true" Size="Size.Small" />
+                        </MudStack>
+                    </MudItem>
+                }
+            </MudGrid>
+        </div>
+    }
+}
+
+@code {
+    private DashboardSummary? _summary;
+    private List<Incident> _activeIncidents = new();
+    private List<AnalystWorkload>? _workload;
+    private List<Alert> _recentAlerts = new();
+    private bool _loading = true;
+    private System.Threading.Timer? _refreshTimer;
+
+    // Chart data
+    private ChartSeries[] _chartSeries = Array.Empty<ChartSeries>();
+    private string[] _chartLabels = Array.Empty<string>();
+    private ChartOptions _lineChartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "#3B82F6" },
+        YAxisTicks = 5,
+        LineStrokeWidth = 2
+    };
+
+    private double[] _pieData = new double[] { 0, 0, 0, 0 };
+    private string[] _pieLabels = new[] { "Critical", "High", "Medium", "Low" };
+    private ChartOptions _pieChartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "#EF4444", "#F59E0B", "#3B82F6", "#10B981" }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await LoadData();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _summary = await MetricsService.GetSummaryAsync();
+
+            var allIncidents = await IncidentService.GetAllAsync();
+            _activeIncidents = allIncidents
+                .Where(i => i.Status != IncidentStatus.Closed)
+                .OrderBy(i => i.Severity)
+                .ThenBy(i => i.DetectedAt)
+                .ToList();
+
+            _workload = await MetricsService.GetWorkloadAsync();
+
+            var allAlerts = await AlertService.GetAllAsync();
+            _recentAlerts = allAlerts.Take(5).ToList();
+
+            // Build line chart data
+            var timeline = await MetricsService.GetTimelineAsync(14);
+            if (timeline.Count > 0)
+            {
+                _chartSeries = new[]
+                {
+                    new ChartSeries
+                    {
+                        Name = "Incidents",
+                        Data = timeline.Select(t => (double)t.Count).ToArray()
+                    }
+                };
+                _chartLabels = timeline.Select(t => t.Date).ToArray();
+            }
+
+            // Pie chart by severity of active incidents
+            _pieData = new double[]
+            {
+                _activeIncidents.Count(i => i.Severity == Domain.Enums.Severity.SEV0),
+                _activeIncidents.Count(i => i.Severity == Domain.Enums.Severity.SEV1),
+                _activeIncidents.Count(i => i.Severity == Domain.Enums.Severity.SEV2),
+                _activeIncidents.Count(i => i.Severity == Domain.Enums.Severity.SEV3)
+            };
+        }
+        catch (Exception)
+        {
+            // Silently fail on refresh errors
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    public void Dispose() => _refreshTimer?.Dispose();
+
+    private string GetSevClass(Domain.Enums.Severity sev) => sev switch
+    {
+        Domain.Enums.Severity.SEV0 => "sev-0",
+        Domain.Enums.Severity.SEV1 => "sev-1",
+        Domain.Enums.Severity.SEV2 => "sev-2",
+        Domain.Enums.Severity.SEV3 => "sev-3",
+        _ => "sev-3"
+    };
+
+    private string GetAlertSeverityColor(string severity) => severity switch
+    {
+        "Critical" => "#EF4444",
+        "High" => "#F59E0B",
+        "Medium" => "#3B82F6",
+        "Low" => "#10B981",
+        _ => "#64748B"
+    };
+
+    private string GetTimeOpen(DateTime detectedAt)
+    {
+        var elapsed = DateTime.UtcNow - detectedAt;
+        if (elapsed.TotalDays >= 1)
+            return $"{(int)elapsed.TotalDays}d {elapsed.Hours}h";
+        return $"{elapsed.Hours}h {elapsed.Minutes}m";
+    }
+
+    private string GetTimeAgo(DateTime time)
+    {
+        var elapsed = DateTime.UtcNow - time;
+        if (elapsed.TotalMinutes < 1) return "just now";
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalHours < 24) return $"{(int)elapsed.TotalHours}h ago";
+        return $"{(int)elapsed.TotalDays}d ago";
+    }
+
+    private string FormatMttr(int minutes)
+    {
+        if (minutes == 0) return "N/A";
+        if (minutes < 60) return $"{minutes}m";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        return $"{h}h {m}m";
+    }
+
+    private Color GetWorkloadColor(int count) => count switch
+    {
+        > 4 => Color.Error,
+        > 2 => Color.Warning,
+        _ => Color.Success
+    };
+}

@@ -1,0 +1,85 @@
+@page "/login"
+@layout EmptyLayout
+@inject IHttpContextAccessor HttpContextAccessor
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>IR Command — Sign In</PageTitle>
+
+<div class="auth-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+    <div class="blob blob-4"></div>
+
+    <div class="auth-card">
+        <div class="text-center mb-6 auth-field">
+            <MudAvatar Size="Size.Large" Style="background: var(--gradient-primary); width: 64px; height: 64px; margin: 0 auto;" Class="auth-logo">
+                <MudIcon Icon="@Icons.Material.Filled.Shield" Size="Size.Large" Style="color: white;" />
+            </MudAvatar>
+        </div>
+
+        <div class="auth-field text-center mb-2">
+            <MudText Typo="Typo.h4" Class="auth-title">IR Command</MudText>
+        </div>
+        <div class="auth-field text-center mb-6">
+            <MudText Typo="Typo.body2" Class="auth-subtitle">Incident Response Platform</MudText>
+        </div>
+
+        @if (_showError)
+        {
+            <div class="auth-field">
+                <MudAlert Severity="MudBlazor.Severity.Error" Class="mb-4" Variant="Variant.Filled"
+                          Style="border-radius: 12px; background: rgba(239, 83, 80, 0.2); border: 1px solid rgba(239, 83, 80, 0.3); color: #ffa4a4;">
+                    Invalid username or password.
+                </MudAlert>
+            </div>
+        }
+
+        <form method="post" action="/account/login">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="/" />
+
+            <div class="auth-field">
+                <MudTextField @bind-Value="_username" Label="Username" Variant="Variant.Outlined"
+                              Class="mb-4" Immediate="true" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Person" />
+                <input type="hidden" name="username" value="@_username" />
+            </div>
+
+            <div class="auth-field">
+                <MudTextField @bind-Value="_password" Label="Password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" Class="mb-5" Immediate="true"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock" />
+                <input type="hidden" name="password" value="@_password" />
+            </div>
+
+            <div class="auth-field">
+                <MudButton FullWidth="true" ButtonType="ButtonType.Submit"
+                           Class="auth-btn mb-4" Variant="Variant.Filled" Size="Size.Large">
+                    Sign In
+                </MudButton>
+            </div>
+        </form>
+
+        <div class="auth-field text-center">
+            <MudText Typo="Typo.caption" Class="auth-subtitle">
+                Demo: admin / Admin@123 &nbsp;|&nbsp; analyst1 / Test@123
+            </MudText>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string _username = string.Empty;
+    private string _password = string.Empty;
+    private bool _showError;
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    protected override void OnInitialized()
+    {
+        _showError = Error == "1";
+    }
+}

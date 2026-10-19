@@ -1,0 +1,330 @@
+@page "/reports"
+@rendermode InteractiveServer
+@inject IMetricsService MetricsService
+@inject IIncidentService IncidentService
+@inject NavigationManager Navigation
+
+<PageTitle>Reports — IR Command</PageTitle>
+
+<!-- Page Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" Style="vertical-align:middle;color:#8B5CF6;" />
+            Reports &amp; Analytics
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color:#94A3B8;">Operational metrics and incident analysis</MudText>
+    </div>
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+        <MudSelect T="int" Value="_selectedRange" Label="Date Range" Variant="Variant.Outlined" Dense="true"
+                   Style="min-width:160px;"
+                   ValueChanged="@(async (int v) => { _selectedRange = v; await LoadData(); })">
+            <MudSelectItem Value="7">Last 7 days</MudSelectItem>
+            <MudSelectItem Value="30">Last 30 days</MudSelectItem>
+            <MudSelectItem Value="90">Last 90 days</MudSelectItem>
+        </MudSelect>
+        <MudButton Variant="Variant.Outlined"
+                   Style="border-color:rgba(16,185,129,0.4);color:#10B981;"
+                   StartIcon="@Icons.Material.Filled.Download"
+                   OnClick="ExportCsv">
+            Export CSV
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<!-- Section 1: Summary Stats -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="12" sm="4">
+        <div class="glass-card" style="padding:20px;text-align:center;">
+            <MudText Typo="Typo.h3" Style="font-weight:700;color:#3B82F6;">@FormatMttr(_summary?.AvgMttrMinutes ?? 0)</MudText>
+            <MudText Typo="Typo.body2" Style="color:#64748B;margin-top:4px;">Average MTTR</MudText>
+            <MudText Typo="Typo.caption" Style="color:#475569;">Mean Time to Resolve</MudText>
+        </div>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        <div class="glass-card" style="padding:20px;text-align:center;">
+            <MudText Typo="Typo.h3" Style="font-weight:700;color:#10B981;">@_totalIncidents</MudText>
+            <MudText Typo="Typo.body2" Style="color:#64748B;margin-top:4px;">Total Incidents</MudText>
+            <MudText Typo="Typo.caption" Style="color:#475569;">In selected period</MudText>
+        </div>
+    </MudItem>
+    <MudItem xs="12" sm="4">
+        @{ var slaCompColor = _slaCompliancePct >= 80 ? "#10B981" : "#EF4444"; }
+        <div class="glass-card" style="padding:20px;text-align:center;">
+            <MudText Typo="Typo.h3" Style="@($"font-weight:700;color:{slaCompColor};")">@_slaCompliancePct%</MudText>
+            <MudText Typo="Typo.body2" Style="color:#64748B;margin-top:4px;">SLA Compliance</MudText>
+            <MudText Typo="Typo.caption" Style="color:#475569;">Incidents resolved within SLA</MudText>
+        </div>
+    </MudItem>
+</MudGrid>
+
+<!-- Section 2: Incident Trend Chart -->
+<div class="glass-card" style="padding:20px;margin-bottom:24px;">
+    <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+        <MudIcon Icon="@Icons.Material.Filled.Timeline" Class="mr-2" Style="color:#3B82F6;vertical-align:middle;" />
+        Incident Trend (@_selectedRange-Day)
+    </MudText>
+    @if (_chartSeries.Length > 0 && _chartLabels.Length > 0)
+    {
+        <MudChart ChartType="ChartType.Line"
+                  Series="@_chartSeries"
+                  XAxisLabels="@_chartLabels"
+                  ChartOptions="@_lineChartOptions"
+                  Height="250" />
+    }
+    else
+    {
+        <div style="height:250px;display:flex;align-items:center;justify-content:center;">
+            <MudText Style="color:#475569;">No trend data available for this period</MudText>
+        </div>
+    }
+</div>
+
+<!-- Section 3: Severity Distribution -->
+<MudGrid Spacing="3" Class="mb-6">
+    <MudItem xs="12" md="5">
+        <div class="glass-card" style="padding:20px;height:100%;">
+            <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+                <MudIcon Icon="@Icons.Material.Filled.PieChart" Class="mr-2" Style="color:#8B5CF6;vertical-align:middle;" />
+                Severity Distribution
+            </MudText>
+            @if (_pieData.Any(d => d > 0))
+            {
+                <MudChart ChartType="ChartType.Donut"
+                          InputData="@_pieData"
+                          InputLabels="@_pieLabels"
+                          ChartOptions="@_pieChartOptions"
+                          Height="250" />
+            }
+            else
+            {
+                <div style="height:250px;display:flex;align-items:center;justify-content:center;">
+                    <MudText Style="color:#475569;">No data</MudText>
+                </div>
+            }
+        </div>
+    </MudItem>
+
+    <!-- Section 4: Top Categories -->
+    <MudItem xs="12" md="7">
+        <div class="glass-card" style="padding:20px;height:100%;">
+            <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+                <MudIcon Icon="@Icons.Material.Filled.Category" Class="mr-2" Style="color:#F59E0B;vertical-align:middle;" />
+                Top Incident Categories
+            </MudText>
+            <MudTable Items="@_topCategories" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+                      Style="background:transparent;">
+                <HeaderContent>
+                    <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">CATEGORY</MudTh>
+                    <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">COUNT</MudTh>
+                    <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">SHARE</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="cat">
+                    <MudTd><MudText Typo="Typo.body2" Style="color:#E2E8F0;">@cat.Category</MudText></MudTd>
+                    <MudTd><MudText Typo="Typo.body2" Style="font-weight:600;color:#F1F5F9;">@cat.Count</MudText></MudTd>
+                    <MudTd>
+                        <MudProgressLinear Value="@cat.Percent" Color="Color.Primary" Rounded="true" Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Style="color:#64748B;">@((int)cat.Percent)%</MudText>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4" Style="color:#475569;">No category data</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </div>
+    </MudItem>
+</MudGrid>
+
+<!-- Section 5: Analyst Performance -->
+<div class="glass-card" style="padding:20px;">
+    <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:600;margin-bottom:16px;">
+        <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" Style="color:#06B6D4;vertical-align:middle;" />
+        Analyst Performance
+    </MudText>
+    <MudTable Items="@_analystPerformance" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+              Style="background:transparent;">
+        <HeaderContent>
+            <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">ANALYST</MudTh>
+            <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">OPEN</MudTh>
+            <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">RESOLVED</MudTh>
+            <MudTh Style="color:#64748B;font-size:11px;font-weight:600;">AVG MTTR</MudTh>
+        </HeaderContent>
+        <RowTemplate Context="ap">
+            <MudTd>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <div style="width:28px;height:28px;background:linear-gradient(135deg,#3B82F6,#8B5CF6);border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                        <MudText Style="color:white;font-weight:700;font-size:11px;">@ap.Analyst.FirstOrDefault()</MudText>
+                    </div>
+                    <MudText Typo="Typo.body2" Style="color:#E2E8F0;font-weight:500;">@ap.Analyst</MudText>
+                </MudStack>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Style="background:rgba(239,68,68,0.15);color:#EF4444;height:22px;">@ap.OpenCount</MudChip>
+            </MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Style="background:rgba(16,185,129,0.15);color:#10B981;height:22px;">@ap.ResolvedCount</MudChip>
+            </MudTd>
+            <MudTd>
+                <MudText Typo="Typo.body2" Style="color:#94A3B8;">@FormatMttr(ap.AvgMttrMinutes)</MudText>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText Class="pa-4" Style="color:#475569;">No analyst data</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</div>
+
+@code {
+    private bool _loading = true;
+    private int _selectedRange = 30;
+    private DashboardSummary? _summary;
+    private int _totalIncidents;
+    private int _slaCompliancePct;
+
+    private ChartSeries[] _chartSeries = Array.Empty<ChartSeries>();
+    private string[] _chartLabels = Array.Empty<string>();
+    private ChartOptions _lineChartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "#3B82F6", "#10B981" },
+        YAxisTicks = 5,
+        LineStrokeWidth = 2
+    };
+
+    private double[] _pieData = new double[] { 0, 0, 0, 0 };
+    private string[] _pieLabels = new[] { "Critical", "High", "Medium", "Low" };
+    private ChartOptions _pieChartOptions = new ChartOptions
+    {
+        ChartPalette = new[] { "#EF4444", "#F59E0B", "#3B82F6", "#10B981" }
+    };
+
+    private List<CategoryStat> _topCategories = new();
+    private List<AnalystPerformanceStat> _analystPerformance = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _loading = true;
+        try
+        {
+            _summary = await MetricsService.GetSummaryAsync();
+            var timeline = await MetricsService.GetTimelineAsync(_selectedRange);
+            _totalIncidents = timeline.Sum(t => t.Count);
+
+            if (timeline.Count > 0)
+            {
+                _chartSeries = new[]
+                {
+                    new ChartSeries { Name = "Incidents", Data = timeline.Select(t => (double)t.Count).ToArray() }
+                };
+                _chartLabels = timeline.Select(t => t.Date).ToArray();
+            }
+            else
+            {
+                _chartSeries = Array.Empty<ChartSeries>();
+                _chartLabels = Array.Empty<string>();
+            }
+
+            var allIncidents = await IncidentService.GetAllAsync();
+
+            // Pie data from all active
+            var active = allIncidents.Where(i => i.Status != IncidentStatus.Closed).ToList();
+            _pieData = new double[]
+            {
+                active.Count(i => i.Severity == Domain.Enums.Severity.SEV0),
+                active.Count(i => i.Severity == Domain.Enums.Severity.SEV1),
+                active.Count(i => i.Severity == Domain.Enums.Severity.SEV2),
+                active.Count(i => i.Severity == Domain.Enums.Severity.SEV3)
+            };
+
+            // SLA compliance
+            var resolved = allIncidents.Where(i => i.ResolvedAt.HasValue).ToList();
+            var slaOk = resolved.Count(i =>
+            {
+                var hours = (i.ResolvedAt!.Value - i.DetectedAt).TotalHours;
+                return i.Severity switch
+                {
+                    Domain.Enums.Severity.SEV0 => hours <= 1,
+                    Domain.Enums.Severity.SEV1 => hours <= 4,
+                    Domain.Enums.Severity.SEV2 => hours <= 24,
+                    Domain.Enums.Severity.SEV3 => hours <= 72,
+                    _ => true
+                };
+            });
+            _slaCompliancePct = resolved.Count > 0 ? (int)((double)slaOk / resolved.Count * 100) : 100;
+
+            // Top categories via tags
+            var tagCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var inc in allIncidents.Where(i => !string.IsNullOrEmpty(i.Tags)))
+            {
+                try
+                {
+                    var tags = System.Text.Json.JsonSerializer.Deserialize<List<string>>(inc.Tags!);
+                    if (tags != null)
+                        foreach (var tag in tags)
+                        {
+                            tagCounts.TryGetValue(tag, out var cnt);
+                            tagCounts[tag] = cnt + 1;
+                        }
+                }
+                catch { }
+            }
+            var totalTagged = tagCounts.Values.Sum();
+            _topCategories = tagCounts
+                .OrderByDescending(kvp => kvp.Value)
+                .Take(6)
+                .Select(kvp => new CategoryStat(kvp.Key, kvp.Value, totalTagged > 0 ? (double)kvp.Value / totalTagged * 100 : 0))
+                .ToList();
+
+            // Analyst performance
+            var workload = await MetricsService.GetWorkloadAsync();
+            var analystGroups = allIncidents
+                .Where(i => !string.IsNullOrEmpty(i.AssignedTo))
+                .GroupBy(i => i.AssignedTo!)
+                .ToList();
+
+            _analystPerformance = analystGroups.Select(g =>
+            {
+                var openCount = g.Count(i => i.Status != IncidentStatus.Closed);
+                var resolvedList = g.Where(i => i.ResolvedAt.HasValue).ToList();
+                var avgMttr = resolvedList.Count > 0
+                    ? (int)resolvedList.Average(i => (i.ResolvedAt!.Value - i.DetectedAt).TotalMinutes)
+                    : 0;
+                return new AnalystPerformanceStat(g.Key, openCount, resolvedList.Count, avgMttr);
+            }).OrderByDescending(a => a.ResolvedCount).ToList();
+        }
+        catch (Exception)
+        {
+            // Silent fail
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ExportCsv()
+    {
+        Navigation.NavigateTo("/api/incidents/export-csv", forceLoad: true);
+    }
+
+    private string FormatMttr(int minutes)
+    {
+        if (minutes == 0) return "N/A";
+        if (minutes < 60) return $"{minutes}m";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        return $"{h}h {m}m";
+    }
+
+    private record CategoryStat(string Category, int Count, double Percent);
+    private record AnalystPerformanceStat(string Analyst, int OpenCount, int ResolvedCount, int AvgMttrMinutes);
+}

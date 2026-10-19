@@ -1,0 +1,288 @@
+@page "/alerts"
+@rendermode InteractiveServer
+@inject IAlertService AlertService
+@inject IIncidentService IncidentService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Alerts — IR Command</PageTitle>
+
+<!-- Page Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Class="mr-2" Style="vertical-align:middle;color:#F59E0B;" />
+            Alerts
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color:#94A3B8;">Raw incoming security alerts from all sources</MudText>
+    </div>
+    <MudChip T="string" Style="background:rgba(239,68,68,0.15);color:#EF4444;border:1px solid rgba(239,68,68,0.3);">
+        @_newCount New
+    </MudChip>
+</MudStack>
+
+<!-- Filter Tabs -->
+<div style="display:flex;gap:8px;margin-bottom:24px;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:0;">
+    @foreach (var tab in _tabs)
+    {
+        var count = GetTabCount(tab);
+        <button class="filter-tab @(_activeTab == tab ? "active" : "")"
+                @onclick="@(() => SetTab(tab))">
+            @tab
+            @if (count > 0)
+            {
+                <span class="tab-badge">@count</span>
+            }
+        </button>
+    }
+</div>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<!-- Alert List -->
+<div>
+    @if (_filtered.Count == 0)
+    {
+        <div style="text-align:center;padding:80px 0;">
+            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Style="font-size:48px;color:#10B981;margin-bottom:16px;" />
+            <MudText Typo="Typo.h6" Style="color:#64748B;">No alerts in this category</MudText>
+        </div>
+    }
+    else
+    {
+        @foreach (var alert in _filtered)
+        {
+            <div class="alert-card" style="border-left:4px solid @GetSeverityColor(alert.Severity);margin-bottom:12px;">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                    <div style="flex:1;min-width:0;">
+                        <!-- Header row -->
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2" Style="flex-wrap:wrap;">
+                            @if (alert.Status == "New")
+                            {
+                                <div style="width:8px;height:8px;background:#EF4444;border-radius:50%;animation:pulse 2s infinite;flex-shrink:0;"></div>
+                            }
+                            <MudText Typo="Typo.caption" Style="font-family:monospace;color:#64748B;font-weight:600;">@alert.AlertNumber</MudText>
+                            <span style="background:rgba(99,102,241,0.15);color:#818CF8;border:1px solid rgba(99,102,241,0.2);padding:2px 8px;border-radius:4px;font-size:11px;">@alert.Source</span>
+                            <span class="badge-@alert.Severity.ToLower()" style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">@alert.Severity</span>
+                            <span class="status-chip-@alert.Status.ToLower()" style="padding:2px 8px;border-radius:4px;font-size:11px;">@alert.Status</span>
+                            <MudText Typo="Typo.caption" Style="color:#475569;margin-left:auto;">@GetTimeAgo(alert.ReceivedAt)</MudText>
+                        </MudStack>
+
+                        <!-- Title -->
+                        <MudText Typo="Typo.body1" Style="font-weight:700;color:#F1F5F9;margin-bottom:4px;">@alert.Title</MudText>
+
+                        <!-- Description -->
+                        <MudText Typo="Typo.body2" Style="color:#94A3B8;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">
+                            @alert.Description
+                        </MudText>
+
+                        @if (alert.AcknowledgedBy != null)
+                        {
+                            <MudText Typo="Typo.caption" Style="color:#64748B;margin-top:4px;">
+                                Acknowledged by @alert.AcknowledgedBy at @alert.AcknowledgedAt?.ToString("MMM dd, HH:mm")
+                            </MudText>
+                        }
+                    </div>
+
+                    <!-- Actions -->
+                    <MudStack Spacing="1" Style="flex-shrink:0;margin-left:16px;">
+                        @if (alert.Status == "New")
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       Style="border-color:rgba(59,130,246,0.4);color:#3B82F6;min-width:140px;"
+                                       OnClick="@(() => AcknowledgeAlert(alert))">
+                                Acknowledge
+                            </MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Filled"
+                                       Style="background:#EF4444;color:white;min-width:140px;"
+                                       OnClick="@(() => ConvertAlert(alert))">
+                                Convert to Incident
+                            </MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                       Style="color:#64748B;min-width:140px;"
+                                       OnClick="@(() => DismissAlert(alert))">
+                                Dismiss
+                            </MudButton>
+                        }
+                        else if (alert.Status == "Acknowledged")
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Filled"
+                                       Style="background:#EF4444;color:white;min-width:140px;"
+                                       OnClick="@(() => ConvertAlert(alert))">
+                                Convert to Incident
+                            </MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text"
+                                       Style="color:#64748B;min-width:140px;"
+                                       OnClick="@(() => DismissAlert(alert))">
+                                Dismiss
+                            </MudButton>
+                        }
+                        else if (alert.Status == "Converted" && alert.ConvertedToIncidentId.HasValue)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined"
+                                       Style="border-color:rgba(16,185,129,0.4);color:#10B981;min-width:140px;"
+                                       OnClick="@(() => Navigation.NavigateTo($"/incidents/{alert.ConvertedToIncidentId}"))">
+                                View Incident
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+            </div>
+        }
+    }
+</div>
+
+<!-- Convert Confirmation Dialog -->
+<MudDialog @bind-Visible="_showConvertDialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.BugReport" Class="mr-2" Style="color:#EF4444;" />
+            Convert Alert to Incident
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_alertToConvert != null)
+        {
+            <MudText Style="color:#94A3B8;">
+                This will create a new incident from alert <strong style="color:#F1F5F9;">@_alertToConvert.AlertNumber</strong>:
+                <strong style="color:#F1F5F9;">@_alertToConvert.Title</strong>
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#64748B;margin-top:8px;">
+                The alert will be marked as Converted and linked to the new incident.
+            </MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showConvertDialog = false)" Variant="Variant.Text" Style="color:#94A3B8;">Cancel</MudButton>
+        <MudButton OnClick="ConfirmConvert" Variant="Variant.Filled" Style="background:#EF4444;color:white;" Disabled="@_converting">
+            @if (_converting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Convert to Incident
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Alert> _allAlerts = new();
+    private List<Alert> _filtered = new();
+    private bool _loading = true;
+    private int _newCount;
+    private string _activeTab = "All";
+    private Alert? _alertToConvert;
+    private bool _showConvertDialog;
+    private bool _converting;
+
+    private string[] _tabs = { "All", "New", "Acknowledged", "Dismissed", "Converted" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAlerts();
+    }
+
+    private async Task LoadAlerts()
+    {
+        _loading = true;
+        _allAlerts = await AlertService.GetAllAsync();
+        _newCount = _allAlerts.Count(a => a.Status == "New");
+        ApplyFilter();
+        _loading = false;
+    }
+
+    private void SetTab(string tab)
+    {
+        _activeTab = tab;
+        ApplyFilter();
+    }
+
+    private void ApplyFilter()
+    {
+        _filtered = _activeTab == "All"
+            ? _allAlerts.ToList()
+            : _allAlerts.Where(a => a.Status == _activeTab).ToList();
+    }
+
+    private int GetTabCount(string tab) => tab switch
+    {
+        "All" => _allAlerts.Count,
+        "New" => _allAlerts.Count(a => a.Status == "New"),
+        "Acknowledged" => _allAlerts.Count(a => a.Status == "Acknowledged"),
+        "Dismissed" => _allAlerts.Count(a => a.Status == "Dismissed"),
+        "Converted" => _allAlerts.Count(a => a.Status == "Converted"),
+        _ => 0
+    };
+
+    private async Task AcknowledgeAlert(Alert alert)
+    {
+        var result = await AlertService.AcknowledgeAsync(alert.Id, "admin");
+        if (result)
+        {
+            Snackbar.Add($"Alert {alert.AlertNumber} acknowledged.", MudBlazor.Severity.Success);
+            await LoadAlerts();
+        }
+    }
+
+    private void ConvertAlert(Alert alert)
+    {
+        _alertToConvert = alert;
+        _showConvertDialog = true;
+    }
+
+    private async Task ConfirmConvert()
+    {
+        if (_alertToConvert == null) return;
+        _converting = true;
+
+        try
+        {
+            var incidentId = await AlertService.ConvertToIncidentAsync(_alertToConvert.Id, "admin");
+            if (incidentId.HasValue)
+            {
+                Snackbar.Add($"Alert converted to incident successfully.", MudBlazor.Severity.Success);
+                _showConvertDialog = false;
+                await LoadAlerts();
+                Navigation.NavigateTo($"/incidents/{incidentId.Value}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error converting alert: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _converting = false;
+        }
+    }
+
+    private async Task DismissAlert(Alert alert)
+    {
+        var result = await AlertService.DismissAsync(alert.Id);
+        if (result)
+        {
+            Snackbar.Add($"Alert {alert.AlertNumber} dismissed.", MudBlazor.Severity.Info);
+            await LoadAlerts();
+        }
+    }
+
+    private string GetSeverityColor(string severity) => severity switch
+    {
+        "Critical" => "#EF4444",
+        "High" => "#F59E0B",
+        "Medium" => "#3B82F6",
+        "Low" => "#10B981",
+        _ => "#64748B"
+    };
+
+    private string GetTimeAgo(DateTime time)
+    {
+        var elapsed = DateTime.UtcNow - time;
+        if (elapsed.TotalMinutes < 1) return "just now";
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes}m ago";
+        if (elapsed.TotalHours < 24) return $"{(int)elapsed.TotalHours}h ago";
+        return $"{(int)elapsed.TotalDays}d ago";
+    }
+}

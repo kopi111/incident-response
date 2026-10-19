@@ -1,0 +1,167 @@
+@page "/users"
+@rendermode InteractiveServer
+@inject IAuthService AuthService
+@inject ISnackbar Snackbar
+
+<PageTitle>User Management — IR Command</PageTitle>
+
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-family: 'Poppins', sans-serif; font-weight: 600;">
+            <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" Style="vertical-align: middle;" />
+            User Management
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color: var(--mud-palette-text-secondary);">
+            Manage IR Command user accounts
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+               OnClick="@(() => _showAddDialog = true)">
+        Add User
+    </MudButton>
+</MudStack>
+
+<MudPaper Class="section-card" Elevation="1">
+    @if (_loading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    <div class="premium-table-wrapper">
+        <MudTable Items="@_users" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Username</MudTh>
+                <MudTh>Display Name</MudTh>
+                <MudTh>Role</MudTh>
+                <MudTh>Created</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudAvatar Size="Size.Small" Style="background: var(--gradient-primary);">
+                            <MudText Style="color: white; font-weight: 600;" Typo="Typo.caption">
+                                @context.Username.FirstOrDefault().ToString().ToUpper()
+                            </MudText>
+                        </MudAvatar>
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@context.Username</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd>@context.DisplayName</MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(context.Role)" Variant="Variant.Filled">
+                        @context.Role
+                    </MudChip>
+                </MudTd>
+                <MudTd>
+                    <MudText Typo="Typo.caption">@context.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4" Style="color: var(--mud-palette-text-secondary);">No users found.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </div>
+</MudPaper>
+
+<!-- Add User Dialog -->
+<MudDialog @bind-Visible="_showAddDialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Class="mr-2" />
+            Add New User
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_newUsername" Label="Username" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="_newDisplayName" Label="Display Name" Variant="Variant.Outlined" Required="true" />
+            <MudTextField @bind-Value="_newPassword" Label="Password" Variant="Variant.Outlined"
+                          InputType="InputType.Password" Required="true" />
+            <MudSelect @bind-Value="_newRole" Label="Role" Variant="Variant.Outlined">
+                <MudSelectItem Value="@("Analyst")">Analyst</MudSelectItem>
+                <MudSelectItem Value="@("Manager")">Manager</MudSelectItem>
+                <MudSelectItem Value="@("Executive")">Executive</MudSelectItem>
+                <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+            </MudSelect>
+            @if (!string.IsNullOrEmpty(_addError))
+            {
+                <MudAlert Severity="MudBlazor.Severity.Error">@_addError</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseAddDialog" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="AddUser" Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(_newUsername) || string.IsNullOrWhiteSpace(_newPassword))">
+            Create User
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<AppUser> _users = new();
+    private bool _loading = true;
+    private bool _showAddDialog = false;
+
+    private string _newUsername = string.Empty;
+    private string _newDisplayName = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _newRole = "Analyst";
+    private string? _addError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        _loading = true;
+        try
+        {
+            _users = await AuthService.GetAllUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading users: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task AddUser()
+    {
+        _addError = null;
+        try
+        {
+            await AuthService.CreateUserAsync(_newUsername, _newDisplayName, _newPassword, _newRole);
+            await LoadUsers();
+            CloseAddDialog();
+            Snackbar.Add($"User '{_newUsername}' created successfully.", MudBlazor.Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            _addError = ex.Message;
+        }
+    }
+
+    private void CloseAddDialog()
+    {
+        _showAddDialog = false;
+        _newUsername = string.Empty;
+        _newDisplayName = string.Empty;
+        _newPassword = string.Empty;
+        _newRole = "Analyst";
+        _addError = null;
+    }
+
+    private Color GetRoleColor(string role) => role switch
+    {
+        "Admin" => Color.Error,
+        "Manager" => Color.Warning,
+        "Analyst" => Color.Info,
+        "Executive" => Color.Secondary,
+        _ => Color.Default
+    };
+}

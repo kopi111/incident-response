@@ -1,0 +1,278 @@
+@page "/cases"
+@rendermode InteractiveServer
+@inject ICaseService CaseService
+@inject ISnackbar Snackbar
+
+<PageTitle>Cases — IR Command</PageTitle>
+
+<!-- Page Header -->
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h5" Style="font-weight:700;color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Class="mr-2" Style="vertical-align:middle;color:#3B82F6;" />
+            Cases
+        </MudText>
+        <MudText Typo="Typo.body2" Style="color:#94A3B8;">Aggregate related incidents into investigation cases</MudText>
+    </div>
+    <MudButton Variant="Variant.Filled"
+               Style="background:#3B82F6;color:white;"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewCaseDialog">
+        New Case
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<!-- Cases Grid -->
+@if (_cases.Count == 0 && !_loading)
+{
+    <div style="text-align:center;padding:80px 0;">
+        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Style="font-size:64px;color:#1E293B;margin-bottom:16px;" />
+        <MudText Typo="Typo.h6" Style="color:#64748B;">No cases yet</MudText>
+        <MudText Typo="Typo.body2" Style="color:#475569;margin-bottom:24px;">Create your first case to group related incidents</MudText>
+        <MudButton Variant="Variant.Filled" Style="background:#3B82F6;color:white;" OnClick="OpenNewCaseDialog">Create Case</MudButton>
+    </div>
+}
+else
+{
+    <MudGrid Spacing="3">
+        @foreach (var c in _cases)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <div class="glass-card case-card" style="padding:20px;height:100%;display:flex;flex-direction:column;gap:12px;">
+                    <!-- Case header -->
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.caption" Style="font-family:monospace;color:#64748B;font-weight:600;">@c.CaseNumber</MudText>
+                        <span class="@GetStatusChipClass(c.Status)" style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;">@c.Status</span>
+                    </MudStack>
+
+                    <!-- Title -->
+                    <MudText Typo="Typo.h6" Style="font-weight:700;color:#F1F5F9;line-height:1.3;">@c.Title</MudText>
+
+                    <!-- Description -->
+                    <MudText Typo="Typo.body2" Style="color:#94A3B8;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;flex:1;">@c.Description</MudText>
+
+                    <!-- Meta info -->
+                    <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:12px;">
+                        <MudGrid Spacing="1">
+                            <MudItem xs="6">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.caption" Style="color:#475569;font-size:10px;letter-spacing:0.5px;">LINKED INCIDENTS</MudText>
+                                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;font-weight:600;">@c.CaseIncidents.Count</MudText>
+                                </MudStack>
+                            </MudItem>
+                            <MudItem xs="6">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.caption" Style="color:#475569;font-size:10px;letter-spacing:0.5px;">ASSIGNED TO</MudText>
+                                    <MudText Typo="Typo.body2" Style="color:#F1F5F9;font-weight:600;">@(string.IsNullOrEmpty(c.AssignedTo) ? "Unassigned" : c.AssignedTo)</MudText>
+                                </MudStack>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.caption" Style="color:#475569;font-size:10px;letter-spacing:0.5px;">CREATED</MudText>
+                                    <MudText Typo="Typo.body2" Style="color:#94A3B8;">@c.CreatedAt.ToString("MMM dd, yyyy")</MudText>
+                                </MudStack>
+                            </MudItem>
+                        </MudGrid>
+                    </div>
+
+                    <MudButton Variant="Variant.Outlined"
+                               Style="border-color:rgba(59,130,246,0.4);color:#3B82F6;"
+                               FullWidth="true"
+                               OnClick="@(() => ViewCase(c))">
+                        View Case
+                    </MudButton>
+                </div>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<!-- New Case Dialog -->
+<MudDialog @bind-Visible="_showNewCaseDialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="color:#F1F5F9;">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" Style="color:#3B82F6;" />
+            New Case
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="_newTitle" Label="Title" Variant="Variant.Outlined" Required="true"
+                          Placeholder="e.g. APT Campaign Analysis" />
+            <MudTextField @bind-Value="_newDescription" Label="Description" Variant="Variant.Outlined"
+                          Lines="3" Placeholder="Brief description of this investigation case..." />
+            <MudTextField @bind-Value="_newAssignedTo" Label="Assign To" Variant="Variant.Outlined"
+                          Placeholder="Username of assignee" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showNewCaseDialog = false)" Variant="Variant.Text" Style="color:#94A3B8;">Cancel</MudButton>
+        <MudButton OnClick="CreateCase" Variant="Variant.Filled" Style="background:#3B82F6;color:white;"
+                   Disabled="@(string.IsNullOrWhiteSpace(_newTitle) || _creating)">
+            @if (_creating)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Case
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+<!-- View Case Dialog -->
+<MudDialog @bind-Visible="_showViewDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        @if (_selectedCase != null)
+        {
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.caption" Style="font-family:monospace;color:#64748B;">@_selectedCase.CaseNumber</MudText>
+                    <MudText Typo="Typo.h6" Style="color:#F1F5F9;font-weight:700;">@_selectedCase.Title</MudText>
+                </MudStack>
+                <span class="@GetStatusChipClass(_selectedCase.Status)" style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;">@_selectedCase.Status</span>
+            </MudStack>
+        }
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedCase != null)
+        {
+            <MudStack Spacing="3">
+                <MudText Style="color:#94A3B8;">@_selectedCase.Description</MudText>
+
+                <MudGrid Spacing="2">
+                    <MudItem xs="6">
+                        <div style="background:#0B0F1A;border-radius:8px;padding:12px;">
+                            <MudText Typo="Typo.caption" Style="color:#475569;font-size:10px;letter-spacing:0.5px;">ASSIGNED TO</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#F1F5F9;font-weight:600;margin-top:4px;">@(string.IsNullOrEmpty(_selectedCase.AssignedTo) ? "Unassigned" : _selectedCase.AssignedTo)</MudText>
+                        </div>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <div style="background:#0B0F1A;border-radius:8px;padding:12px;">
+                            <MudText Typo="Typo.caption" Style="color:#475569;font-size:10px;letter-spacing:0.5px;">CREATED</MudText>
+                            <MudText Typo="Typo.body2" Style="color:#F1F5F9;font-weight:600;margin-top:4px;">@_selectedCase.CreatedAt.ToString("MMM dd, yyyy HH:mm")</MudText>
+                        </div>
+                    </MudItem>
+                </MudGrid>
+
+                @if (_selectedCase.CaseIncidents.Count > 0)
+                {
+                    <div>
+                        <MudText Typo="Typo.subtitle1" Style="color:#F1F5F9;font-weight:600;margin-bottom:12px;">
+                            Linked Incidents (@_selectedCase.CaseIncidents.Count)
+                        </MudText>
+                        @foreach (var ci in _selectedCase.CaseIncidents)
+                        {
+                            <div style="background:#0B0F1A;border-radius:8px;padding:12px;margin-bottom:8px;border-left:3px solid @GetIncidentSevColor(ci.Incident);">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.caption" Style="font-family:monospace;color:#64748B;">@ci.Incident.IncidentNumber</MudText>
+                                        <MudText Typo="Typo.body2" Style="color:#E2E8F0;font-weight:500;">@ci.Incident.Title</MudText>
+                                    </MudStack>
+                                    <span class="sev-badge @GetIncidentSevClass(ci.Incident)">@ci.Incident.Severity</span>
+                                </MudStack>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <MudText Style="color:#475569;text-align:center;padding:24px 0;">No linked incidents</MudText>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showViewDialog = false)" Variant="Variant.Text" Style="color:#94A3B8;">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Case> _cases = new();
+    private Case? _selectedCase;
+    private bool _loading = true;
+    private bool _showNewCaseDialog;
+    private bool _showViewDialog;
+    private bool _creating;
+
+    private string _newTitle = string.Empty;
+    private string _newDescription = string.Empty;
+    private string _newAssignedTo = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCases();
+    }
+
+    private async Task LoadCases()
+    {
+        _loading = true;
+        _cases = await CaseService.GetAllAsync();
+        _loading = false;
+    }
+
+    private void OpenNewCaseDialog()
+    {
+        _newTitle = string.Empty;
+        _newDescription = string.Empty;
+        _newAssignedTo = string.Empty;
+        _showNewCaseDialog = true;
+    }
+
+    private async Task CreateCase()
+    {
+        if (string.IsNullOrWhiteSpace(_newTitle)) return;
+        _creating = true;
+
+        try
+        {
+            await CaseService.CreateAsync(_newTitle, _newDescription, _newAssignedTo, "admin");
+            Snackbar.Add("Case created successfully.", MudBlazor.Severity.Success);
+            _showNewCaseDialog = false;
+            await LoadCases();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating case: {ex.Message}", MudBlazor.Severity.Error);
+        }
+        finally
+        {
+            _creating = false;
+        }
+    }
+
+    private void ViewCase(Case c)
+    {
+        _selectedCase = c;
+        _showViewDialog = true;
+    }
+
+    private string GetStatusChipClass(string status) => status switch
+    {
+        "Open" => "status-open",
+        "InProgress" => "status-inprogress",
+        "Closed" => "status-closed",
+        _ => "status-open"
+    };
+
+    private string GetIncidentSevClass(Incident inc) => inc.Severity switch
+    {
+        Domain.Enums.Severity.SEV0 => "sev-0",
+        Domain.Enums.Severity.SEV1 => "sev-1",
+        Domain.Enums.Severity.SEV2 => "sev-2",
+        Domain.Enums.Severity.SEV3 => "sev-3",
+        _ => "sev-3"
+    };
+
+    private string GetIncidentSevColor(Incident inc) => inc.Severity switch
+    {
+        Domain.Enums.Severity.SEV0 => "#EF4444",
+        Domain.Enums.Severity.SEV1 => "#F59E0B",
+        Domain.Enums.Severity.SEV2 => "#3B82F6",
+        Domain.Enums.Severity.SEV3 => "#10B981",
+        _ => "#64748B"
+    };
+}
